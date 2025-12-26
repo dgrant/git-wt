@@ -57,6 +57,15 @@ git-wt --init fish | source
 Invoke-Expression (git-wt --init powershell | Out-String)
 ```
 
+> [!IMPORTANT]
+> The shell integration creates a `git()` wrapper function to enable automatic directory switching with `git wt <branch>`. This wrapper intercepts only `git wt <branch>` commands and passes all other git commands through unchanged. If you have other tools or customizations that also wrap the `git` command, there may be conflicts.
+
+If you want only completion without the `git()` wrapper (no automatic directory switching), use the `--ignore-switch-directory` option:
+
+``` zsh
+eval "$(git-wt --init zsh --ignore-switch-directory)"
+```
+
 ## Configuration
 
 Configuration is done via `git config`.
