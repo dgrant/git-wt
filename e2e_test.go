@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -26,7 +29,7 @@ func buildBinary(t *testing.T) string {
 	return binPath
 }
 
-// runGitWt runs git-wt command and returns stdout.
+// runGitWt runs git-wt command and returns combined output (stdout + stderr).
 func runGitWt(t *testing.T, binPath, dir string, args ...string) (string, error) {
 	t.Helper()
 
@@ -34,6 +37,20 @@ func runGitWt(t *testing.T, binPath, dir string, args ...string) (string, error)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	return strings.TrimSpace(string(out)), err
+}
+
+// runGitWtStdout runs git-wt command and returns stdout only.
+// This is important for shell integration tests where only stdout is captured.
+func runGitWtStdout(t *testing.T, binPath, dir string, args ...string) (stdout string, stderr string, err error) {
+	t.Helper()
+
+	cmd := exec.Command(binPath, args...)
+	cmd.Dir = dir
+	var stdoutBuf, stderrBuf bytes.Buffer
+	cmd.Stdout = &stdoutBuf
+	cmd.Stderr = &stderrBuf
+	err = cmd.Run()
+	return strings.TrimSpace(stdoutBuf.String()), strings.TrimSpace(stderrBuf.String()), err
 }
 
 // worktreePath extracts the worktree path from git-wt output.
@@ -65,6 +82,192 @@ func TestE2E_ListWorktrees(t *testing.T) {
 
 	if !strings.Contains(out, "main") {
 		t.Errorf("output should contain 'main' branch, got: %s", out)
+	}
+}
+
+// TestE2E_ListWorktrees_TableFormat tests that git-wt table output is properly formatted
+// with newlines preserved (regression test for fish shell hook issue, ref: PR #14).
+func TestE2E_ListWorktrees_TableFormat(t *testing.T) {
+	binPath := buildBinary(t)
+
+	repo := testutil.NewTestRepo(t)
+	repo.CreateFile("README.md", "# Test")
+	repo.Commit("initial commit")
+
+	// Create multiple worktrees to ensure table has multiple rows
+	_, err := runGitWt(t, binPath, repo.Root, "feature-a")
+	if err != nil {
+		t.Fatalf("failed to create worktree feature-a: %v", err)
+	}
+	_, err = runGitWt(t, binPath, repo.Root, "feature-b")
+	if err != nil {
+		t.Fatalf("failed to create worktree feature-b: %v", err)
+	}
+
+	// Run git wt (list worktrees)
+	out, err := runGitWt(t, binPath, repo.Root)
+	if err != nil {
+		t.Fatalf("git-wt failed: %v\noutput: %s", err, out)
+	}
+
+	// Table output should have multiple lines (header + at least 3 worktrees)
+	lines := strings.Split(out, "\n")
+	if len(lines) < 4 {
+		t.Errorf("table output should have at least 4 lines (header + 3 worktrees), got %d lines:\n%s", len(lines), out)
+	}
+
+	// Each worktree should be on its own line (not collapsed into one line)
+	// Check that main, feature-a, and feature-b are on separate lines
+	var mainLine, featureALine, featureBLine string
+	for _, line := range lines {
+		if strings.Contains(line, "main") {
+			mainLine = line
+		}
+		if strings.Contains(line, "feature-a") {
+			featureALine = line
+		}
+		if strings.Contains(line, "feature-b") {
+			featureBLine = line
+		}
+	}
+
+	if mainLine == "" {
+		t.Error("main branch should be on its own line")
+	}
+	if featureALine == "" {
+		t.Error("feature-a branch should be on its own line")
+	}
+	if featureBLine == "" {
+		t.Error("feature-b branch should be on its own line")
+	}
+
+	// Ensure they are on different lines (not all on the same line)
+	if mainLine == featureALine || mainLine == featureBLine || featureALine == featureBLine {
+		t.Errorf("each worktree should be on its own line, but found duplicates:\nmain: %q\nfeature-a: %q\nfeature-b: %q", mainLine, featureALine, featureBLine)
+	}
+}
+
+// verifyTableFormat checks that table output has proper newline formatting.
+// Returns error if the output appears to be collapsed into a single line.
+func verifyTableFormat(t *testing.T, output string) {
+	t.Helper()
+
+	lines := strings.Split(output, "\n")
+
+	// Should have at least 4 lines (header + 3 worktrees)
+	if len(lines) < 4 {
+		t.Errorf("table output should have at least 4 lines, got %d lines:\n%s", len(lines), output)
+	}
+
+	// Each worktree should be on its own line
+	var mainLine, featureALine, featureBLine string
+	for _, line := range lines {
+		if strings.Contains(line, "main") {
+			mainLine = line
+		}
+		if strings.Contains(line, "feature-a") {
+			featureALine = line
+		}
+		if strings.Contains(line, "feature-b") {
+			featureBLine = line
+		}
+	}
+
+	if mainLine == "" {
+		t.Error("main branch should be on its own line")
+	}
+	if featureALine == "" {
+		t.Error("feature-a branch should be on its own line")
+	}
+	if featureBLine == "" {
+		t.Error("feature-b branch should be on its own line")
+	}
+
+	// Ensure they are on different lines
+	if mainLine == featureALine || mainLine == featureBLine || featureALine == featureBLine {
+		t.Errorf("each worktree should be on its own line, but found duplicates:\nmain: %q\nfeature-a: %q\nfeature-b: %q", mainLine, featureALine, featureBLine)
+	}
+}
+
+// TestE2E_ListWorktrees_TableFormat_Shell tests table output formatting via shell integration.
+// Regression test for PR #14 which fixed fish hook output formatting.
+func TestE2E_ListWorktrees_TableFormat_Shell(t *testing.T) {
+	binPath := buildBinary(t)
+
+	tests := []struct {
+		name       string
+		shell      string
+		scriptFunc func(repoRoot, pathDir, binPath string) string
+	}{
+		{
+			name:  "bash",
+			shell: "bash",
+			scriptFunc: func(repoRoot, pathDir, binPath string) string {
+				return fmt.Sprintf(`
+set -e
+cd %q
+export PATH="%s:$PATH"
+eval "$(%s --init bash)"
+git wt
+`, repoRoot, pathDir, binPath) //nostyle:funcfmt
+			},
+		},
+		{
+			name:  "zsh",
+			shell: "zsh",
+			scriptFunc: func(repoRoot, pathDir, binPath string) string {
+				return fmt.Sprintf(`
+set -e
+cd %q
+export PATH="%s:$PATH"
+eval "$(%s --init zsh)"
+git wt
+`, repoRoot, pathDir, binPath) //nostyle:funcfmt
+			},
+		},
+		{
+			name:  "fish",
+			shell: "fish",
+			scriptFunc: func(repoRoot, pathDir, binPath string) string {
+				return fmt.Sprintf(`
+cd %q
+set -x PATH %s $PATH
+%s --init fish | source
+git wt
+`, repoRoot, pathDir, binPath) //nostyle:funcfmt
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := exec.LookPath(tt.shell); err != nil {
+				t.Skipf("%s not available", tt.shell)
+			}
+
+			repo := testutil.NewTestRepo(t)
+			repo.CreateFile("README.md", "# Test")
+			repo.Commit("initial commit")
+
+			// Create worktrees first (without shell integration)
+			_, err := runGitWt(t, binPath, repo.Root, "feature-a")
+			if err != nil {
+				t.Fatalf("failed to create worktree feature-a: %v", err)
+			}
+			_, err = runGitWt(t, binPath, repo.Root, "feature-b")
+			if err != nil {
+				t.Fatalf("failed to create worktree feature-b: %v", err)
+			}
+
+			script := tt.scriptFunc(repo.Root, filepath.Dir(binPath), binPath)
+			cmd := exec.Command(tt.shell, "-c", script) //#nosec G204
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("%s shell integration failed: %v\noutput: %s", tt.shell, err, out)
+			}
+
+			verifyTableFormat(t, string(out))
+		})
 	}
 }
 
@@ -375,7 +578,7 @@ func TestE2E_Help(t *testing.T) {
 	}
 
 	expectedStrings := []string{
-		"git wt [branch]",
+		"git wt [branch|worktree]",
 		"--delete",
 		"--force-delete",
 		"--init",
@@ -423,5 +626,286 @@ func TestE2E_ExistingBranch(t *testing.T) {
 
 	if !strings.Contains(string(branchOut), "existing-branch") {
 		t.Error("existing-branch should still exist")
+	}
+}
+
+// TestE2E_ShellIntegration_StdoutFormat tests that git-wt output is compatible
+// with shell integration (stdout contains only the path, suitable for cd).
+func TestE2E_ShellIntegration_StdoutFormat(t *testing.T) {
+	binPath := buildBinary(t)
+
+	t.Run("list_worktrees_stdout_is_not_directory", func(t *testing.T) {
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		stdout, _, err := runGitWtStdout(t, binPath, repo.Root)
+		if err != nil {
+			t.Fatalf("git-wt failed: %v", err)
+		}
+
+		// List output should NOT be a valid directory path
+		// (it's a table, so shell integration should not cd)
+		info, err := os.Stat(stdout)
+		if err == nil && info.IsDir() {
+			t.Errorf("list output should not be a valid directory, got: %s", stdout)
+		}
+	})
+
+	t.Run("create_worktree_stdout_is_directory", func(t *testing.T) {
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		stdout, stderr, err := runGitWtStdout(t, binPath, repo.Root, "feature-shell")
+		if err != nil {
+			t.Fatalf("git-wt feature-shell failed: %v\nstderr: %s", err, stderr)
+		}
+
+		// stdout should be exactly one line (the path)
+		lines := strings.Split(stdout, "\n")
+		if len(lines) != 1 {
+			t.Errorf("stdout should be exactly 1 line, got %d lines: %q", len(lines), stdout)
+		}
+
+		// stdout should be a valid directory
+		info, err := os.Stat(stdout)
+		if err != nil {
+			t.Errorf("stdout path does not exist: %v", err)
+		} else if !info.IsDir() {
+			t.Errorf("stdout should be a directory, got: %s", stdout)
+		}
+
+		// stderr should contain git messages (not empty for new worktree)
+		if stderr == "" {
+			t.Log("warning: stderr is empty (git worktree add usually outputs to stderr)")
+		}
+	})
+
+	t.Run("switch_worktree_stdout_is_directory", func(t *testing.T) {
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		// Create worktree first
+		_, _, err := runGitWtStdout(t, binPath, repo.Root, "existing-wt")
+		if err != nil {
+			t.Fatalf("failed to create worktree: %v", err)
+		}
+
+		// Switch to existing worktree
+		stdout, stderr, err := runGitWtStdout(t, binPath, repo.Root, "existing-wt")
+		if err != nil {
+			t.Fatalf("git-wt existing-wt failed: %v\nstderr: %s", err, stderr)
+		}
+
+		// stdout should be exactly one line
+		lines := strings.Split(stdout, "\n")
+		if len(lines) != 1 {
+			t.Errorf("stdout should be exactly 1 line, got %d lines: %q", len(lines), stdout)
+		}
+
+		// stdout should be a valid directory
+		info, err := os.Stat(stdout)
+		if err != nil {
+			t.Errorf("stdout path does not exist: %v", err)
+		} else if !info.IsDir() {
+			t.Errorf("stdout should be a directory, got: %s", stdout)
+		}
+
+		// stderr should be empty for existing worktree (no git operation)
+		if stderr != "" {
+			t.Logf("note: stderr is not empty for existing worktree: %s", stderr)
+		}
+	})
+
+	t.Run("delete_worktree_stdout_is_not_directory", func(t *testing.T) {
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		// Create worktree first
+		_, _, err := runGitWtStdout(t, binPath, repo.Root, "to-delete-shell")
+		if err != nil {
+			t.Fatalf("failed to create worktree: %v", err)
+		}
+
+		// Delete worktree
+		stdout, _, err := runGitWtStdout(t, binPath, repo.Root, "-d", "to-delete-shell")
+		if err != nil {
+			t.Fatalf("git-wt -d failed: %v", err)
+		}
+
+		// Delete output should NOT be a valid directory
+		// (it's a message, so shell integration should not cd)
+		info, err := os.Stat(stdout)
+		if err == nil && info.IsDir() {
+			t.Errorf("delete output should not be a valid directory, got: %s", stdout)
+		}
+	})
+}
+
+// TestE2E_ShellIntegration_Bash tests the actual shell integration with bash.
+func TestE2E_ShellIntegration_Bash(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash not available")
+	}
+
+	binPath := buildBinary(t)
+	repo := testutil.NewTestRepo(t)
+	repo.CreateFile("README.md", "# Test")
+	repo.Commit("initial commit")
+
+	// Test that shell integration works: eval the init script and run git wt
+	script := fmt.Sprintf(`
+set -e
+cd %q
+export PATH="%s:$PATH"
+eval "$(%s --init bash)"
+
+# Test: git wt <branch> should cd to the worktree
+git wt shell-bash-test
+pwd
+`, repo.Root, filepath.Dir(binPath), binPath) //nostyle:funcfmt
+
+	cmd := exec.Command("bash", "-c", script)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("bash shell integration failed: %v\noutput: %s", err, out)
+	}
+
+	output := strings.TrimSpace(string(out))
+	// The last line should be the worktree path
+	lines := strings.Split(output, "\n")
+	pwd := lines[len(lines)-1]
+
+	if !strings.Contains(pwd, "shell-bash-test") {
+		t.Errorf("pwd should contain worktree path, got: %s", pwd)
+	}
+}
+
+// TestE2E_ShellIntegration_Zsh tests the actual shell integration with zsh.
+func TestE2E_ShellIntegration_Zsh(t *testing.T) {
+	if _, err := exec.LookPath("zsh"); err != nil {
+		t.Skip("zsh not available")
+	}
+
+	binPath := buildBinary(t)
+	repo := testutil.NewTestRepo(t)
+	repo.CreateFile("README.md", "# Test")
+	repo.Commit("initial commit")
+
+	script := fmt.Sprintf(`
+set -e
+cd %q
+export PATH="%s:$PATH"
+eval "$(%s --init zsh)"
+
+# Test: git wt <branch> should cd to the worktree
+git wt shell-zsh-test
+pwd
+`, repo.Root, filepath.Dir(binPath), binPath) //nostyle:funcfmt
+
+	cmd := exec.Command("zsh", "-c", script)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("zsh shell integration failed: %v\noutput: %s", err, out)
+	}
+
+	output := strings.TrimSpace(string(out))
+	lines := strings.Split(output, "\n")
+	pwd := lines[len(lines)-1]
+
+	if !strings.Contains(pwd, "shell-zsh-test") {
+		t.Errorf("pwd should contain worktree path, got: %s", pwd)
+	}
+}
+
+// TestE2E_ShellIntegration_Fish tests the actual shell integration with fish.
+func TestE2E_ShellIntegration_Fish(t *testing.T) {
+	if _, err := exec.LookPath("fish"); err != nil {
+		t.Skip("fish not available")
+	}
+
+	binPath := buildBinary(t)
+	repo := testutil.NewTestRepo(t)
+	repo.CreateFile("README.md", "# Test")
+	repo.Commit("initial commit")
+
+	script := fmt.Sprintf(`
+cd %q
+set -x PATH %s $PATH
+%s --init fish | source
+
+# Test: git wt <branch> should cd to the worktree
+git wt shell-fish-test
+pwd
+`, repo.Root, filepath.Dir(binPath), binPath) //nostyle:funcfmt
+
+	cmd := exec.Command("fish", "-c", script)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("fish shell integration failed: %v\noutput: %s", err, out)
+	}
+
+	output := strings.TrimSpace(string(out))
+	lines := strings.Split(output, "\n")
+	pwd := lines[len(lines)-1]
+
+	if !strings.Contains(pwd, "shell-fish-test") {
+		t.Errorf("pwd should contain worktree path, got: %s", pwd)
+	}
+}
+
+// TestE2E_ShellIntegration_PowerShell tests the actual shell integration with PowerShell.
+func TestE2E_ShellIntegration_PowerShell(t *testing.T) {
+	// PowerShell init script uses git.exe which is Windows-specific
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell shell integration test is only supported on Windows")
+	}
+
+	// Try pwsh first (cross-platform), then powershell (Windows)
+	var pwshPath string
+	if p, err := exec.LookPath("pwsh"); err == nil {
+		pwshPath = p
+	} else if p, err := exec.LookPath("powershell"); err == nil {
+		pwshPath = p
+	} else {
+		t.Skip("PowerShell not available")
+	}
+
+	binPath := buildBinary(t)
+	// On Windows, binary needs .exe extension
+	if runtime.GOOS == "windows" && !strings.HasSuffix(binPath, ".exe") {
+		binPath += ".exe"
+	}
+
+	repo := testutil.NewTestRepo(t)
+	repo.CreateFile("README.md", "# Test")
+	repo.Commit("initial commit")
+
+	script := fmt.Sprintf(`
+$ErrorActionPreference = "Stop"
+Set-Location %q
+$env:PATH = %q + [IO.Path]::PathSeparator + $env:PATH
+Invoke-Expression (%s --init powershell | Out-String)
+
+# Test: git wt <branch> should cd to the worktree
+git wt shell-pwsh-test
+Get-Location | Select-Object -ExpandProperty Path
+`, repo.Root, filepath.Dir(binPath), binPath) //nostyle:funcfmt
+
+	cmd := exec.Command(pwshPath, "-NoProfile", "-Command", script)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("PowerShell shell integration failed: %v\noutput: %s", err, out)
+	}
+
+	output := strings.TrimSpace(string(out))
+	lines := strings.Split(output, "\n")
+	pwd := strings.TrimSpace(lines[len(lines)-1])
+
+	if !strings.Contains(pwd, "shell-pwsh-test") {
+		t.Errorf("pwd should contain worktree path, got: %s", pwd)
 	}
 }
