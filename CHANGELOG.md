@@ -4,6 +4,10 @@
 ### New Features 🎉
 - feat: add `wt.nocopy` config and `--nocopy` flag to exclude files from copying by @k1LoW in https://github.com/k1LoW/git-wt/pull/20
 
+## [v0.5.0](https://github.com/k1LoW/git-wt/compare/v0.4.0...v0.5.0) - 2025-12-28
+### New Features 🎉
+- feat: add `wt.nocopy` config and `--nocopy` flag to exclude files from copying by @k1LoW in https://github.com/k1LoW/git-wt/pull/20
+
 ## [v0.4.0](https://github.com/k1LoW/git-wt/compare/v0.3.0...v0.4.0) - 2025-12-28
 ### New Features 🎉
 - feat: add config override flags (`--basedir`, `--copyignored`, `--copyuntracked`, `--copymodified`) by @k1LoW in https://github.com/k1LoW/git-wt/pull/19
