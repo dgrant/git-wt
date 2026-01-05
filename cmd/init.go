@@ -15,7 +15,7 @@ git() {
         local no_switch=false
         local args=()
         for arg in "$@"; do
-            if [[ "$arg" == "--no-switch-directory" ]]; then
+            if [[ "$arg" == "--nocd" || "$arg" == "--no-switch-directory" ]]; then
                 no_switch=true
             fi
             args+=("$arg")
@@ -60,7 +60,7 @@ git() {
         local no_switch=false
         local args=()
         for arg in "$@"; do
-            if [[ "$arg" == "--no-switch-directory" ]]; then
+            if [[ "$arg" == "--nocd" || "$arg" == "--no-switch-directory" ]]; then
                 no_switch=true
             fi
             args+=("$arg")
@@ -126,7 +126,7 @@ function git --wraps git
     if test "$argv[1]" = "wt"
         set -l no_switch false
         for arg in $argv[2..]
-            if test "$arg" = "--no-switch-directory"
+            if test "$arg" = "--nocd" -o "$arg" = "--no-switch-directory"
                 set no_switch true
                 break
             end
@@ -170,7 +170,7 @@ const powershellGitWrapper = `
 function Invoke-Git {
     if ($args[0] -eq "wt") {
         $wtArgs = $args[1..($args.Length-1)]
-        $noSwitch = $wtArgs -contains "--no-switch-directory"
+        $noSwitch = ($wtArgs -contains "--nocd") -or ($wtArgs -contains "--no-switch-directory")
         $result = & git.exe wt @wtArgs 2>&1
         if ($LASTEXITCODE -eq 0 -and (Test-Path $result -PathType Container)) {
             if ($noSwitch) {

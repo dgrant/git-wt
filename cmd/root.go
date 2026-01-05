@@ -36,10 +36,10 @@ import (
 )
 
 var (
-	deleteFlag        bool
-	forceDeleteFlag   bool
-	initShell         string
-	noSwitchDirectory bool
+	deleteFlag      bool
+	forceDeleteFlag bool
+	initShell       string
+	nocd            bool
 	// Config override flags.
 	basedirFlag       string
 	copyignoredFlag   bool
@@ -126,7 +126,11 @@ func init() {
 	rootCmd.Flags().BoolVarP(&deleteFlag, "delete", "d", false, "Delete worktree and branch (safe delete, only if merged)")
 	rootCmd.Flags().BoolVarP(&forceDeleteFlag, "force-delete", "D", false, "Force delete worktree and branch")
 	rootCmd.Flags().StringVar(&initShell, "init", "", "Output shell initialization script (bash, zsh, fish, powershell)")
-	rootCmd.Flags().BoolVar(&noSwitchDirectory, "no-switch-directory", false, "Do not switch directory after creating/switching worktree (also disables git() wrapper when used with --init)")
+	rootCmd.Flags().BoolVar(&nocd, "nocd", false, "Do not change directory after creating/switching worktree (also disables git() wrapper when used with --init)")
+	rootCmd.Flags().BoolVar(&nocd, "no-switch-directory", false, "")
+	if err := rootCmd.Flags().MarkDeprecated("no-switch-directory", "use --nocd instead"); err != nil {
+		panic(err) //nostyle:dontpanic
+	}
 	// Config override flags.
 	rootCmd.Flags().StringVar(&basedirFlag, "basedir", "", "Override wt.basedir config (worktree base directory)")
 	rootCmd.Flags().BoolVar(&copyignoredFlag, "copyignored", false, "Override wt.copyignored config (copy .gitignore'd files)")
@@ -141,7 +145,7 @@ func runRoot(cmd *cobra.Command, args []string) error {
 
 	// Handle init flag
 	if initShell != "" {
-		return runInit(initShell, noSwitchDirectory)
+		return runInit(initShell, nocd)
 	}
 
 	// No arguments: list worktrees

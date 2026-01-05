@@ -60,16 +60,16 @@ Invoke-Expression (git wt --init powershell | Out-String)
 > [!IMPORTANT]
 > The shell integration creates a `git()` wrapper function to enable automatic directory switching with `git wt <branch>`. This wrapper intercepts only `git wt <branch>` commands and passes all other git commands through unchanged. If you have other tools or customizations that also wrap the `git` command, there may be conflicts.
 
-If you want only completion without the `git()` wrapper (no automatic directory switching), use the `--no-switch-directory` option:
+If you want only completion without the `git()` wrapper (no automatic directory switching), use the `--nocd` option:
 
 ``` zsh
-eval "$(git wt --init zsh --no-switch-directory)"
+eval "$(git wt --init zsh --nocd)"
 ```
 
-You can also use `--no-switch-directory` with `git wt <branch>` to create/switch to a worktree without changing the current directory:
+You can also use `--nocd` with `git wt <branch>` to create/switch to a worktree without changing the current directory:
 
 ``` console
-$ git wt --no-switch-directory feature-branch
+$ git wt --nocd feature-branch
 /path/to/worktree/feature-branch  # prints path but stays in current directory
 ```
 

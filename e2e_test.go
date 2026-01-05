@@ -439,17 +439,17 @@ func TestE2E_InitScript(t *testing.T) {
 	}
 }
 
-func TestE2E_InitScript_NoSwitchDirectory(t *testing.T) {
+func TestE2E_InitScript_Nocd(t *testing.T) {
 	binPath := buildBinary(t)
 
-	out, err := runGitWt(t, binPath, t.TempDir(), "--init", "bash", "--no-switch-directory")
+	out, err := runGitWt(t, binPath, t.TempDir(), "--init", "bash", "--nocd")
 	if err != nil {
-		t.Fatalf("git-wt --init bash --no-switch-directory failed: %v\noutput: %s", err, out)
+		t.Fatalf("git-wt --init bash --nocd failed: %v\noutput: %s", err, out)
 	}
 
 	// Should not contain the git wrapper function
 	if strings.Contains(out, "git() {") {
-		t.Error("output should not contain git wrapper when --no-switch-directory is used")
+		t.Error("output should not contain git wrapper when --nocd is used")
 	}
 
 	// Should still contain completion
@@ -1090,9 +1090,9 @@ func TestE2E_FlagOverridesConfig(t *testing.T) {
 	}
 }
 
-// TestE2E_ShellIntegration_NoSwitchDirectory tests that --no-switch-directory flag
+// TestE2E_ShellIntegration_Nocd tests that --nocd flag
 // prevents cd when used with git wt <branch> via shell integration.
-func TestE2E_ShellIntegration_NoSwitchDirectory(t *testing.T) {
+func TestE2E_ShellIntegration_Nocd(t *testing.T) {
 	binPath := buildBinary(t)
 
 	tests := []struct {
@@ -1110,8 +1110,8 @@ cd %q
 export PATH="%s:$PATH"
 eval "$(git wt --init bash)"
 
-# Test: git wt --no-switch-directory <branch> should NOT cd to the worktree
-git wt --no-switch-directory no-switch-bash-test
+# Test: git wt --nocd <branch> should NOT cd to the worktree
+git wt --nocd nocd-bash-test
 pwd
 `, repoRoot, pathDir)
 			},
@@ -1126,8 +1126,8 @@ cd %q
 export PATH="%s:$PATH"
 eval "$(git wt --init zsh)"
 
-# Test: git wt --no-switch-directory <branch> should NOT cd to the worktree
-git wt --no-switch-directory no-switch-zsh-test
+# Test: git wt --nocd <branch> should NOT cd to the worktree
+git wt --nocd nocd-zsh-test
 pwd
 `, repoRoot, pathDir)
 			},
@@ -1141,8 +1141,8 @@ cd %q
 set -x PATH %s $PATH
 git wt --init fish | source
 
-# Test: git wt --no-switch-directory <branch> should NOT cd to the worktree
-git wt --no-switch-directory no-switch-fish-test
+# Test: git wt --nocd <branch> should NOT cd to the worktree
+git wt --nocd nocd-fish-test
 pwd
 `, repoRoot, pathDir)
 			},
@@ -1163,7 +1163,7 @@ pwd
 			cmd := exec.Command(tt.shell, "-c", script) //#nosec G204
 			out, err := cmd.CombinedOutput()
 			if err != nil {
-				t.Fatalf("%s shell integration with --no-switch-directory failed: %v\noutput: %s", tt.shell, err, out)
+				t.Fatalf("%s shell integration with --nocd failed: %v\noutput: %s", tt.shell, err, out)
 			}
 
 			output := strings.TrimSpace(string(out))
@@ -1171,8 +1171,8 @@ pwd
 			pwd := lines[len(lines)-1]
 
 			// pwd should be the original repo root, NOT the new worktree
-			if strings.Contains(pwd, "no-switch-"+tt.name+"-test") {
-				t.Errorf("pwd should NOT contain worktree path when --no-switch-directory is used, got: %s", pwd)
+			if strings.Contains(pwd, "nocd-"+tt.name+"-test") {
+				t.Errorf("pwd should NOT contain worktree path when --nocd is used, got: %s", pwd)
 			}
 			if pwd != repo.Root {
 				t.Errorf("pwd should be original repo root %q, got: %s", repo.Root, pwd)
@@ -1438,7 +1438,7 @@ func TestE2E_Complete(t *testing.T) {
 			"--copymodified",
 			"--hook",
 			"--nocopy",
-			"--no-switch-directory",
+			"--nocd",
 			"-d",
 			"-D",
 		}
