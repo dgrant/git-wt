@@ -47,7 +47,7 @@ _git_wt() {
     _get_comp_words_by_ref -n =: cur prev words cword 2>/dev/null || {
         cur="${COMP_WORDS[COMP_CWORD]}"
     }
-    __gitcomp_nl "$(command git-wt __complete "" 2>/dev/null | grep -v '^:')"
+    __gitcomp_nl "$(command git-wt __complete "$cur" 2>/dev/null | grep -v '^:' | grep -v '^-[^-]' | cut -f1)"
 }
 `
 
@@ -85,13 +85,38 @@ git() {
 `
 
 const zshCompletion = `
-# git wt <branch> completion for zsh
-# Must be compatible with ksh emulation (Git calls: emulate ksh -c $completion_func)
-_git_wt() {
-    local branches
-    branches="$(command git-wt __complete "" 2>/dev/null | grep -v '^:')"
-    __gitcomp_nl "$branches"
+# git wt <branch> completion for zsh with descriptions
+_git-wt() {
+    local -a completions
+    while IFS=$'\t' read -r comp desc; do
+        [[ "$comp" == :* ]] && continue
+        if [[ -n "$desc" ]]; then
+            completions+=("${comp}:${desc}")
+        else
+            completions+=("${comp}")
+        fi
+    done < <(command git-wt __complete "${words[CURRENT]}" 2>/dev/null)
+    _describe 'git-wt' completions
 }
+
+# Hook into git completion for 'git wt'
+_git-wt-wrapper() {
+    if (( CURRENT == 2 )); then
+        _git  # Let git handle subcommand completion
+    elif [[ "${words[2]}" == "wt" ]]; then
+        shift words
+        (( CURRENT-- ))
+        _git-wt
+    else
+        _git
+    fi
+}
+
+# Register completions if compdef is available
+if (( $+functions[compdef] )); then
+    compdef _git-wt git-wt
+    compdef _git-wt-wrapper git
+fi
 `
 
 // Fish hooks.
@@ -126,16 +151,17 @@ end
 
 const fishCompletion = `
 # git wt <branch> completion for fish
-function __fish_git_wt_branches
-    command git-wt __complete "" 2>/dev/null | string match -rv '^:'
+function __fish_git_wt_completions
+    set -l cur (commandline -ct)
+    command git-wt __complete "$cur" 2>/dev/null | string match -rv '^:'
 end
 
-function __fish_git_wt_needs_branch
+function __fish_git_wt_needs_completion
     set -l cmd (commandline -opc)
-    test (count $cmd) -eq 2 -a "$cmd[2]" = "wt"
+    test (count $cmd) -ge 2 -a "$cmd[2]" = "wt"
 end
 
-complete -c git -n '__fish_git_wt_needs_branch' -f -a '(__fish_git_wt_branches)'
+complete -c git -n '__fish_git_wt_needs_completion' -f -a '(__fish_git_wt_completions)'
 `
 
 // PowerShell hooks.

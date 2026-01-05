@@ -410,7 +410,7 @@ func TestE2E_InitScript(t *testing.T) {
 		},
 		{
 			shell:    "zsh",
-			contains: []string{"# git-wt shell hook for zsh", "_git_wt()"},
+			contains: []string{"# git-wt shell hook for zsh", "_git-wt()"},
 		},
 		{
 			shell:    "fish",
@@ -1374,6 +1374,109 @@ func TestE2E_HookOutputToStderr(t *testing.T) {
 	if !strings.Contains(stderr, "hook-output-test") {
 		t.Errorf("hook output should be in stderr, got stderr: %s", stderr)
 	}
+}
+
+// TestE2E_Complete tests the __complete command output.
+func TestE2E_Complete(t *testing.T) {
+	binPath := buildBinary(t)
+
+	repo := testutil.NewTestRepo(t)
+	repo.CreateFile("README.md", "# Test")
+	repo.Commit("initial commit")
+
+	// Create some branches for completion
+	repo.Git("branch", "feature-one")
+	repo.Git("branch", "feature-two")
+
+	t.Run("empty_input_returns_branches", func(t *testing.T) {
+		out, err := runGitWt(t, binPath, repo.Root, "__complete", "")
+		if err != nil {
+			t.Fatalf("__complete failed: %v\noutput: %s", err, out)
+		}
+
+		// Should contain branch names
+		if !strings.Contains(out, "main") {
+			t.Errorf("completion should contain 'main', got: %s", out)
+		}
+		if !strings.Contains(out, "feature-one") {
+			t.Errorf("completion should contain 'feature-one', got: %s", out)
+		}
+		if !strings.Contains(out, "feature-two") {
+			t.Errorf("completion should contain 'feature-two', got: %s", out)
+		}
+	})
+
+	t.Run("partial_input_filters_branches", func(t *testing.T) {
+		out, err := runGitWt(t, binPath, repo.Root, "__complete", "feat")
+		if err != nil {
+			t.Fatalf("__complete failed: %v\noutput: %s", err, out)
+		}
+
+		// Should contain matching branches
+		if !strings.Contains(out, "feature-one") {
+			t.Errorf("completion should contain 'feature-one', got: %s", out)
+		}
+		if !strings.Contains(out, "feature-two") {
+			t.Errorf("completion should contain 'feature-two', got: %s", out)
+		}
+	})
+
+	t.Run("dash_input_returns_flags", func(t *testing.T) {
+		out, err := runGitWt(t, binPath, repo.Root, "__complete", "-")
+		if err != nil {
+			t.Fatalf("__complete failed: %v\noutput: %s", err, out)
+		}
+
+		// Should contain flags with descriptions (tab-separated)
+		expectedFlags := []string{
+			"--delete",
+			"--force-delete",
+			"--init",
+			"--basedir",
+			"--copyignored",
+			"--copyuntracked",
+			"--copymodified",
+			"--hook",
+			"--nocopy",
+			"--no-switch-directory",
+			"-d",
+			"-D",
+		}
+
+		for _, flag := range expectedFlags {
+			if !strings.Contains(out, flag) {
+				t.Errorf("completion should contain %q, got: %s", flag, out)
+			}
+		}
+
+		// Verify tab-separated format (flag\tdescription)
+		lines := strings.Split(out, "\n")
+		hasTabSeparated := false
+		for _, line := range lines {
+			if strings.Contains(line, "\t") && strings.HasPrefix(line, "-") {
+				hasTabSeparated = true
+				break
+			}
+		}
+		if !hasTabSeparated {
+			t.Errorf("completion should have tab-separated descriptions, got: %s", out)
+		}
+	})
+
+	t.Run("double_dash_input_returns_long_flags", func(t *testing.T) {
+		out, err := runGitWt(t, binPath, repo.Root, "__complete", "--")
+		if err != nil {
+			t.Fatalf("__complete failed: %v\noutput: %s", err, out)
+		}
+
+		// Should contain long flags
+		if !strings.Contains(out, "--delete") {
+			t.Errorf("completion should contain '--delete', got: %s", out)
+		}
+		if !strings.Contains(out, "--basedir") {
+			t.Errorf("completion should contain '--basedir', got: %s", out)
+		}
+	})
 }
 
 // TestE2E_ShellIntegration_PowerShell tests the actual shell integration with PowerShell.
