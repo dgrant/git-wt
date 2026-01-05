@@ -160,6 +160,21 @@ func TestLoadConfig(t *testing.T) {
 	if cfg.CopyModified {
 		t.Errorf("LoadConfig().CopyModified default = %v, want false", cfg.CopyModified) //nostyle:errorstrings
 	}
+	if cfg.NoCd {
+		t.Errorf("LoadConfig().NoCd default = %v, want false", cfg.NoCd) //nostyle:errorstrings
+	}
+
+	// Test NoCd setting
+	repo.Git("config", "wt.nocd", "true")
+
+	cfg, err = LoadConfig(t.Context())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !cfg.NoCd {
+		t.Errorf("LoadConfig().NoCd = %v, want true", cfg.NoCd) //nostyle:errorstrings
+	}
 }
 
 func TestExpandPath(t *testing.T) {

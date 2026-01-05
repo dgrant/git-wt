@@ -162,3 +162,15 @@ $ git wt --hook "npm install" feature-branch
 > [!NOTE]
 > - Hooks only run when **creating** a new worktree, not when switching to an existing one.
 > - If a hook fails, execution stops immediately and `git wt` exits with an error (shell integration will not `cd` to the worktree).
+
+#### `wt.nocd` / `--nocd`
+
+Do not change directory to the worktree. Only print the worktree path. When set to true, also disables `git()` wrapper when used with `--init`.
+
+``` console
+$ git config wt.nocd true
+# or use for a single invocation
+$ git wt --nocd feature-branch
+```
+
+Default: `false`

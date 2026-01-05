@@ -108,7 +108,13 @@ Configuration:
     Can be specified multiple times. Hooks run in the new worktree directory.
     Note: Hooks do NOT run when switching to an existing worktree.
     Example: git config --add wt.hook "npm install"
-             git config --add wt.hook "go generate ./..."`,
+             git config --add wt.hook "go generate ./..."
+
+  wt.nocd (--nocd)
+    Do not change directory to the worktree. Only print the worktree path.
+    When set to true, also disables git() wrapper when used with --init.
+    Default: false
+    Example: git config wt.nocd true`,
 	RunE:              runRoot,
 	Args:              cobra.MaximumNArgs(1),
 	ValidArgsFunction: completeBranches,
@@ -126,7 +132,7 @@ func init() {
 	rootCmd.Flags().BoolVarP(&deleteFlag, "delete", "d", false, "Delete worktree and branch (safe delete, only if merged)")
 	rootCmd.Flags().BoolVarP(&forceDeleteFlag, "force-delete", "D", false, "Force delete worktree and branch")
 	rootCmd.Flags().StringVar(&initShell, "init", "", "Output shell initialization script (bash, zsh, fish, powershell)")
-	rootCmd.Flags().BoolVar(&nocd, "nocd", false, "Do not change directory after creating/switching worktree (also disables git() wrapper when used with --init)")
+	rootCmd.Flags().BoolVar(&nocd, "nocd", false, "Do not change directory to the worktree (also disables git() wrapper when used with --init)")
 	rootCmd.Flags().BoolVar(&nocd, "no-switch-directory", false, "")
 	if err := rootCmd.Flags().MarkDeprecated("no-switch-directory", "use --nocd instead"); err != nil {
 		panic(err) //nostyle:dontpanic
@@ -143,9 +149,18 @@ func init() {
 func runRoot(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 
+	// Load config for nocd default
+	cfg, err := git.LoadConfig(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Apply nocd from config if flag not explicitly set
+	effectiveNocd := nocd || cfg.NoCd
+
 	// Handle init flag
 	if initShell != "" {
-		return runInit(initShell, nocd)
+		return runInit(initShell, effectiveNocd)
 	}
 
 	// No arguments: list worktrees

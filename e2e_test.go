@@ -1181,6 +1181,124 @@ pwd
 	}
 }
 
+// TestE2E_NocdConfig tests that wt.nocd config prevents cd to the worktree.
+func TestE2E_NocdConfig(t *testing.T) {
+	binPath := buildBinary(t)
+
+	tests := []struct {
+		name       string
+		shell      string
+		scriptFunc func(repoRoot, pathDir string) string
+	}{
+		{
+			name:  "bash",
+			shell: "bash",
+			scriptFunc: func(repoRoot, pathDir string) string {
+				return fmt.Sprintf(`
+set -e
+cd %q
+export PATH="%s:$PATH"
+eval "$(git wt --init bash)"
+
+# Test: git wt <branch> with wt.nocd=true should NOT cd to the worktree
+git wt nocd-config-bash-test
+pwd
+`, repoRoot, pathDir)
+			},
+		},
+		{
+			name:  "zsh",
+			shell: "zsh",
+			scriptFunc: func(repoRoot, pathDir string) string {
+				return fmt.Sprintf(`
+set -e
+cd %q
+export PATH="%s:$PATH"
+eval "$(git wt --init zsh)"
+
+# Test: git wt <branch> with wt.nocd=true should NOT cd to the worktree
+git wt nocd-config-zsh-test
+pwd
+`, repoRoot, pathDir)
+			},
+		},
+		{
+			name:  "fish",
+			shell: "fish",
+			scriptFunc: func(repoRoot, pathDir string) string {
+				return fmt.Sprintf(`
+cd %q
+set -x PATH %s $PATH
+git wt --init fish | source
+
+# Test: git wt <branch> with wt.nocd=true should NOT cd to the worktree
+git wt nocd-config-fish-test
+pwd
+`, repoRoot, pathDir)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := exec.LookPath(tt.shell); err != nil {
+				t.Skipf("%s not available", tt.shell)
+			}
+
+			repo := testutil.NewTestRepo(t)
+			repo.CreateFile("README.md", "# Test")
+			repo.Commit("initial commit")
+
+			// Set wt.nocd in config
+			repo.Git("config", "wt.nocd", "true")
+
+			script := tt.scriptFunc(repo.Root, filepath.Dir(binPath))
+			cmd := exec.Command(tt.shell, "-c", script) //#nosec G204
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("%s shell integration with wt.nocd config failed: %v\noutput: %s", tt.shell, err, out)
+			}
+
+			output := strings.TrimSpace(string(out))
+			lines := strings.Split(output, "\n")
+			pwd := lines[len(lines)-1]
+
+			// With wt.nocd=true config, pwd should remain in original repo root
+			if strings.Contains(pwd, "nocd-config-"+tt.name+"-test") {
+				t.Errorf("pwd should NOT contain worktree path when wt.nocd=true, got: %s", pwd)
+			}
+			if pwd != repo.Root {
+				t.Errorf("pwd should be original repo root %q, got: %s", repo.Root, pwd)
+			}
+		})
+	}
+}
+
+// TestE2E_NocdConfigWithInitNocd tests that --init with wt.nocd config also disables git() wrapper.
+func TestE2E_NocdConfigWithInitNocd(t *testing.T) {
+	binPath := buildBinary(t)
+
+	repo := testutil.NewTestRepo(t)
+	repo.CreateFile("README.md", "# Test")
+	repo.Commit("initial commit")
+
+	// Set wt.nocd in config
+	repo.Git("config", "wt.nocd", "true")
+
+	restore := repo.Chdir()
+	defer restore()
+
+	out, err := runGitWt(t, binPath, repo.Root, "--init", "bash")
+	if err != nil {
+		t.Fatalf("git-wt --init bash failed: %v\noutput: %s", err, out)
+	}
+
+	// With wt.nocd=true config, output should not contain git wrapper
+	if strings.Contains(out, "git() {") {
+		t.Error("output should not contain git wrapper when wt.nocd=true config is set")
+	}
+}
+
 // TestE2E_HookFlag tests the --hook flag runs commands after creating a new worktree.
 func TestE2E_HookFlag(t *testing.T) {
 	binPath := buildBinary(t)

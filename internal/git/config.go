@@ -17,6 +17,7 @@ const (
 	configKeyCopyModified  = "wt.copymodified"
 	configKeyNoCopy        = "wt.nocopy"
 	configKeyHook          = "wt.hook"
+	configKeyNoCd          = "wt.nocd"
 )
 
 // Config holds all wt configuration values.
@@ -27,6 +28,7 @@ type Config struct {
 	CopyModified  bool
 	NoCopy        []string
 	Hooks         []string
+	NoCd          bool
 }
 
 // GitConfig retrieves all git config values for a key.
@@ -148,6 +150,13 @@ func LoadConfig(ctx context.Context) (Config, error) {
 		return cfg, err
 	}
 	cfg.Hooks = hooks
+
+	// NoCd
+	val, err = GitConfig(ctx, configKeyNoCd)
+	if err != nil {
+		return cfg, err
+	}
+	cfg.NoCd = len(val) > 0 && val[len(val)-1] == "true"
 
 	return cfg, nil
 }
