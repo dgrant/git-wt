@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.13.0](https://github.com/k1LoW/git-wt/compare/v0.12.1...v0.13.0) - 2026-01-12
+### Breaking Changes 🛠
+- fix: use an invalid branch name as the detached HEAD marker by @yoichi in https://github.com/k1LoW/git-wt/pull/68
+### Other Changes
+- chore(deps): bump Songmu/tagpr from 1.10.0 to 1.11.0 in the dependencies group by @dependabot[bot] in https://github.com/k1LoW/git-wt/pull/66
+
 ## [v0.12.1](https://github.com/k1LoW/git-wt/compare/v0.12.0...v0.12.1) - 2026-01-08
 ### Fix bug 🐛
 - fix: invoke cd regardless of branch deletion result by @yoichi in https://github.com/k1LoW/git-wt/pull/64
