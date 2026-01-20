@@ -493,10 +493,19 @@ func deleteWorktrees(ctx context.Context, branches []string, force bool) error {
 				return fmt.Errorf("failed to get worktree directory name: %w", err)
 			}
 
-			// Check branch existence before removal
+			// Check branch existence and default branch status before removal
 			branchExists, err := git.LocalBranchExists(ctx, wt.Branch)
 			if err != nil {
 				return fmt.Errorf("failed to check branch existence: %w", err)
+			}
+
+			// Check if this is the default branch (must be done before worktree removal)
+			var isDefault bool
+			if branchExists {
+				isDefault, err = git.IsDefaultBranch(ctx, wt.Branch)
+				if err != nil {
+					return fmt.Errorf("failed to check default branch: %w", err)
+				}
 			}
 
 			// Remove worktree
@@ -508,12 +517,6 @@ func deleteWorktrees(ctx context.Context, branches []string, force bool) error {
 			// Let git branch -d/-D handle the merge check
 			// If we deleted the current worktree, run git from mainRoot since cwd no longer exists
 			if branchExists {
-				// Check if this is the default branch
-				isDefault, err := git.IsDefaultBranch(ctx, wt.Branch)
-				if err != nil {
-					return fmt.Errorf("failed to check default branch: %w", err)
-				}
-
 				if isDefault && !allowDeleteDefault {
 					// Default branch is protected - only delete worktree
 					if wtDir == wt.Branch {
