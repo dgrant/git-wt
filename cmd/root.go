@@ -46,8 +46,9 @@ var (
 	copyuntrackedFlag bool
 	copymodifiedFlag  bool
 	nocopyFlag        []string
-	copyFlag          []string
-	hookFlag          []string
+	copyFlag           []string
+	hookFlag           []string
+	allowDeleteDefault bool
 )
 
 var rootCmd = &cobra.Command{
@@ -158,6 +159,7 @@ func init() {
 	rootCmd.Flags().StringArrayVar(&nocopyFlag, "nocopy", nil, "Exclude files matching pattern from copying (can be specified multiple times)")
 	rootCmd.Flags().StringArrayVar(&copyFlag, "copy", nil, "Always copy files matching pattern (can be specified multiple times)")
 	rootCmd.Flags().StringArrayVar(&hookFlag, "hook", nil, "Run command after creating new worktree (can be specified multiple times)")
+	rootCmd.Flags().BoolVar(&allowDeleteDefault, "allow-delete-default", false, "Allow deletion of the default branch (main, master)")
 }
 
 func runRoot(cmd *cobra.Command, args []string) error {
@@ -452,6 +454,19 @@ func listWorktrees(ctx context.Context) error {
 }
 
 func deleteWorktrees(ctx context.Context, branches []string, force bool) error {
+	// Check for default branch protection
+	if !allowDeleteDefault {
+		for _, branch := range branches {
+			isDefault, err := git.IsDefaultBranch(ctx, branch)
+			if err != nil {
+				return fmt.Errorf("failed to check default branch: %w", err)
+			}
+			if isDefault {
+				return fmt.Errorf("cannot delete default branch %q: use --allow-delete-default to override", branch)
+			}
+		}
+	}
+
 	// Get main repo root before any deletion (needed for running git commands after worktree removal)
 	mainRoot, err := git.MainRepoRoot(ctx)
 	if err != nil {
