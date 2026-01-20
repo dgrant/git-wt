@@ -63,6 +63,9 @@ Examples:
   git wt -d <branch|worktree>...            Delete worktree and branch (safe)
   git wt -D <branch|worktree>...            Force delete worktree and branch
 
+Note: The default branch (e.g., main, master) is protected from accidental deletion.
+      Use --allow-delete-default to override this protection.
+
 Shell Integration:
   Add the following to your shell config to enable worktree switching and completion:
 

@@ -11,6 +11,9 @@ $ git wt -d <branch|worktree>  # Delete worktree and branch (safe)
 $ git wt -D <branch|worktree>  # Force delete worktree and branch
 ```
 
+> [!NOTE]
+> The default branch (e.g., main, master) is protected from accidental deletion. Use `--allow-delete-default` to override this protection.
+
 ## Install
 
 **go install:**
