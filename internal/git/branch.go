@@ -187,3 +187,15 @@ func DefaultBranch(ctx context.Context) (string, error) {
 	}
 	return configBranch, nil
 }
+
+// IsDefaultBranch checks if the given branch name is the default branch.
+func IsDefaultBranch(ctx context.Context, branch string) (bool, error) {
+	defaultBranch, err := DefaultBranch(ctx)
+	if err != nil {
+		return false, err
+	}
+	if defaultBranch == "" {
+		return false, nil
+	}
+	return branch == defaultBranch, nil
+}
