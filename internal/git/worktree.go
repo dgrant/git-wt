@@ -178,6 +178,10 @@ func AddWorktree(ctx context.Context, path, branch string, copyOpts CopyOptions)
 		return fmt.Errorf("failed to create parent directory: %w", err)
 	}
 
+	if err := initBaseDir(parentDir); err != nil {
+		return err
+	}
+
 	cmd, err := gitCommand(ctx, "worktree", "add", path, branch)
 	if err != nil {
 		return err
@@ -212,6 +216,10 @@ func AddWorktreeWithNewBranch(ctx context.Context, path, branch, startPoint stri
 		return fmt.Errorf("failed to create parent directory: %w", err)
 	}
 
+	if err := initBaseDir(parentDir); err != nil {
+		return err
+	}
+
 	// Build command arguments
 	args := []string{"worktree", "add", "-b", branch, path}
 	if startPoint != "" {
@@ -232,6 +240,36 @@ func AddWorktreeWithNewBranch(ctx context.Context, path, branch, startPoint stri
 	// Copy files to new worktree
 	if err := CopyFilesToWorktree(ctx, srcRoot, path, copyOpts); err != nil {
 		return fmt.Errorf("failed to copy files: %w", err)
+	}
+
+	return nil
+}
+
+// initBaseDir initializes the basedir with .gitignore and README.md files.
+// It creates these files only if they don't already exist.
+func initBaseDir(baseDir string) error {
+	gitignorePath := filepath.Join(baseDir, ".gitignore")
+	if _, err := os.Stat(gitignorePath); os.IsNotExist(err) {
+		if err := os.WriteFile(gitignorePath, []byte("*\n"), 0644); err != nil {
+			return fmt.Errorf("failed to create .gitignore: %w", err)
+		}
+	}
+
+	readmePath := filepath.Join(baseDir, "README.md")
+	if _, err := os.Stat(readmePath); os.IsNotExist(err) {
+		readmeContent := `# Git worktrees added by ` + "`git wt`" + `
+
+This directory contains Git worktrees created with ` + "`git wt`" + `.
+
+- Do NOT edit files here from parent directory contexts.
+- Each subdirectory is an independent Git worktree and should be opened
+  and operated on directly.
+- Depending on your configuration, this directory may be placed under a Git repository.
+  A ` + "`.gitignore`" + ` file ensures everything under it is ignored in that case.
+`
+		if err := os.WriteFile(readmePath, []byte(readmeContent), 0644); err != nil {
+			return fmt.Errorf("failed to create README.md: %w", err)
+		}
 	}
 
 	return nil
