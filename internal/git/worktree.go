@@ -250,7 +250,7 @@ func AddWorktreeWithNewBranch(ctx context.Context, path, branch, startPoint stri
 func initBaseDir(baseDir string) error {
 	gitignorePath := filepath.Join(baseDir, ".gitignore")
 	if _, err := os.Stat(gitignorePath); os.IsNotExist(err) {
-		if err := os.WriteFile(gitignorePath, []byte("*\n"), 0644); err != nil {
+		if err := os.WriteFile(gitignorePath, []byte("*\n"), 0600); err != nil {
 			return fmt.Errorf("failed to create .gitignore: %w", err)
 		}
 	}
@@ -267,7 +267,7 @@ This directory contains Git worktrees created with ` + "`git wt`" + `.
 - Depending on your configuration, this directory may be placed under a Git repository.
   A ` + "`.gitignore`" + ` file ensures everything under it is ignored in that case.
 `
-		if err := os.WriteFile(readmePath, []byte(readmeContent), 0644); err != nil {
+		if err := os.WriteFile(readmePath, []byte(readmeContent), 0600); err != nil {
 			return fmt.Errorf("failed to create README.md: %w", err)
 		}
 	}
