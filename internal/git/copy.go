@@ -177,7 +177,7 @@ func listFilesMatchingCopyPatterns(ctx context.Context, root string, patterns []
 	}
 
 	// Get untracked files
-	untracked, err := listUntrackedFiles(ctx, root)
+	untracked, err := ListUntrackedFiles(ctx, root)
 	if err != nil {
 		return nil, err
 	}

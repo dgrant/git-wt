@@ -524,6 +524,8 @@ func TestCopyFilesToWorktree_Copy_MatchesUntrackedFiles(t *testing.T) {
 	// .env should NOT be copied (doesn't match the Copy pattern)
 	if _, err := os.Stat(filepath.Join(dstDir, ".env")); !os.IsNotExist(err) {
 		t.Error(".env should NOT have been copied (doesn't match Copy pattern)")
+	}
+}
 
 func TestCopyFile_PreservesTimestamps(t *testing.T) {
 	tmpDir := t.TempDir()
