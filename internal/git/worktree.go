@@ -105,7 +105,8 @@ func FindWorktreeByBranch(ctx context.Context, branch string) (*Worktree, error)
 }
 
 // FindWorktreeByBranchOrDir finds a worktree by branch name or directory name.
-// It first tries to match by branch name, then by directory name (relative path from base dir).
+// It first tries to match by branch name, then by directory name (relative path from base dir),
+// and finally by filesystem path (relative or absolute).
 func FindWorktreeByBranchOrDir(ctx context.Context, query string) (*Worktree, error) {
 	worktrees, err := ListWorktrees(ctx)
 	if err != nil {
@@ -141,6 +142,30 @@ func FindWorktreeByBranchOrDir(ctx context.Context, query string) (*Worktree, er
 		}
 		if relPath == query {
 			return &wt, nil
+		}
+	}
+
+	// Finally, if query is a valid filesystem path, resolve it and try to match
+	if info, err := os.Stat(query); err == nil && info.IsDir() {
+		absPath, err := filepath.Abs(query)
+		if err != nil {
+			return nil, nil
+		}
+		queryRelPath, err := filepath.Rel(baseDir, absPath)
+		if err != nil {
+			return nil, nil
+		}
+		for _, wt := range worktrees {
+			relPath, err := filepath.Rel(baseDir, wt.Path)
+			if err != nil {
+				continue
+			}
+			if strings.HasPrefix(relPath, "..") {
+				continue
+			}
+			if relPath == queryRelPath {
+				return &wt, nil
+			}
 		}
 	}
 
