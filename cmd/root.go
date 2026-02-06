@@ -59,8 +59,8 @@ var rootCmd = &cobra.Command{
 
 Examples:
   git wt                                    List all worktrees
-  git wt <branch|worktree>                  Switch to worktree (create worktree/branch if needed)
-  git wt <branch|worktree> <start-point>    Create worktree from start-point (e.g., origin/main)
+  git wt <branch|worktree|path>              Switch to worktree (create worktree/branch if needed)
+  git wt <branch|worktree|path> <start-point>    Create worktree from start-point (e.g., origin/main)
   git wt -d <branch|worktree|path>...       Delete worktree and branch (safe)
   git wt -D <branch|worktree|path>...       Force delete worktree and branch
 

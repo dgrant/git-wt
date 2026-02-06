@@ -2,6 +2,7 @@
 //   - TestE2E_ListWorktrees: listing worktrees and table formatting
 //   - TestE2E_CreateWorktree: creating worktrees (basic, start-point, existing branch, from worktree)
 //   - TestE2E_SwitchWorktree: switching to existing worktrees
+//   - TestE2E_SwitchWorktreeByPath: switching to worktrees by filesystem path
 //   - TestE2E_CLI: CLI behavior (version, help, argument validation)
 package e2e
 
@@ -432,6 +433,106 @@ func TestE2E_SwitchWorktree(t *testing.T) {
 	if out2 != wtPath {
 		t.Errorf("expected same path %q, got %q", wtPath, out2)
 	}
+}
+
+func TestE2E_SwitchWorktreeByPath(t *testing.T) {
+	t.Parallel()
+	binPath := buildBinary(t)
+
+	t.Run("switch_with_relative_path", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		// Create two worktrees
+		outA, err := runGitWt(t, binPath, repo.Root, "wt-a")
+		if err != nil {
+			t.Fatalf("failed to create worktree wt-a: %v", err)
+		}
+		wtPathA := worktreePath(outA)
+
+		outB, err := runGitWt(t, binPath, repo.Root, "wt-b")
+		if err != nil {
+			t.Fatalf("failed to create worktree wt-b: %v", err)
+		}
+		wtPathB := worktreePath(outB)
+
+		// From inside wt-b, switch to wt-a using relative path ../wt-a
+		stdout, stderr, err := runGitWtStdout(t, binPath, wtPathB, "../wt-a")
+		if err != nil {
+			t.Fatalf("git-wt ../wt-a failed: %v\nstderr: %s", err, stderr)
+		}
+
+		gotPath := strings.TrimSpace(stdout)
+		if gotPath != wtPathA {
+			t.Errorf("expected switch to return %q, got %q", wtPathA, gotPath)
+		}
+	})
+
+	t.Run("switch_with_absolute_path", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		out, err := runGitWt(t, binPath, repo.Root, "abs-test")
+		if err != nil {
+			t.Fatalf("failed to create worktree: %v", err)
+		}
+		wtPath := worktreePath(out)
+
+		if !filepath.IsAbs(wtPath) {
+			t.Fatalf("expected absolute path, got %q", wtPath)
+		}
+
+		// Switch using absolute path
+		stdout, stderr, err := runGitWtStdout(t, binPath, repo.Root, wtPath)
+		if err != nil {
+			t.Fatalf("git-wt %s failed: %v\nstderr: %s", wtPath, err, stderr)
+		}
+
+		gotPath := strings.TrimSpace(stdout)
+		if gotPath != wtPath {
+			t.Errorf("expected switch to return %q, got %q", wtPath, gotPath)
+		}
+	})
+
+	t.Run("switch_branch_name_takes_precedence_over_filesystem_path", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		// Create a worktree named "test"
+		out, err := runGitWt(t, binPath, repo.Root, "test")
+		if err != nil {
+			t.Fatalf("failed to create worktree test: %v", err)
+		}
+		wtPath := worktreePath(out)
+
+		// Create a local directory named "test" inside the main repo
+		localDir := filepath.Join(repo.Root, "test")
+		if err := os.Mkdir(localDir, 0755); err != nil {
+			t.Fatalf("failed to create local directory: %v", err)
+		}
+
+		// From main repo, switch to "test" - should switch to the worktree, not be confused by local dir
+		stdout, stderr, err := runGitWtStdout(t, binPath, repo.Root, "test")
+		if err != nil {
+			t.Fatalf("git-wt test failed: %v\nstderr: %s", err, stderr)
+		}
+
+		gotPath := strings.TrimSpace(stdout)
+		if gotPath != wtPath {
+			t.Errorf("expected worktree path %q (matched by branch name), got %q", wtPath, gotPath)
+		}
+
+		// Verify the local directory still exists (untouched)
+		if _, err := os.Stat(localDir); os.IsNotExist(err) {
+			t.Error("local directory test should still exist")
+		}
+	})
 }
 
 func TestE2E_CLI(t *testing.T) {
