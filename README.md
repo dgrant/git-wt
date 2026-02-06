@@ -14,7 +14,7 @@ $ git wt -D <branch|worktree|path>  # Force delete worktree and branch
 The target can be specified as:
 - **branch**: a git branch name — `git wt feature-branch`
 - **worktree**: a directory name relative to [`wt.basedir`](#wtbasedir----basedir) (default `.wt`)
-- **path**: a filesystem path (relative or absolute) to an existing worktree — `git wt ../sibling`, `git wt /absolute/path`
+- **path**: a filesystem path (absolute or relative to the current working directory) to an existing worktree — `git wt ../sibling`, `git wt /absolute/path`
 
 When deleting, the same target types apply: `git wt -d feature-branch`, `git wt -d .`, `git wt -d ../sibling`
 
