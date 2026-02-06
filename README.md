@@ -25,6 +25,13 @@ $ git wt -D <branch|worktree>  # Force delete worktree and branch
 $ go install github.com/k1LoW/git-wt@latest
 ```
 
+**go update:**
+
+``` console
+$ go clean -modcache
+$ go install github.com/k1LoW/git-wt@latest
+```
+
 **homebrew tap:**
 
 ``` console
