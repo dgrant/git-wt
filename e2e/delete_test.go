@@ -706,4 +706,153 @@ pwd
 			})
 		}
 	})
+
+	t.Run("delete_with_dot_path", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		out, err := runGitWt(t, binPath, repo.Root, "dot-test")
+		if err != nil {
+			t.Fatalf("failed to create worktree: %v", err)
+		}
+		wtPath := worktreePath(out)
+
+		// Run from inside the worktree with "." as the target
+		cmd := exec.Command(binPath, "-D", ".")
+		cmd.Dir = wtPath
+		cmd.Env = append(os.Environ(), "GIT_WT_SHELL_INTEGRATION=1")
+		var stdoutBuf, stderrBuf bytes.Buffer
+		cmd.Stdout = &stdoutBuf
+		cmd.Stderr = &stderrBuf
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("git-wt -D . failed: %v\nstderr: %s", err, stderrBuf.String())
+		}
+
+		// Verify worktree was deleted
+		if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
+			t.Error("worktree should have been deleted")
+		}
+
+		// Verify last line is main repo path (for shell integration)
+		stdout := strings.TrimSpace(stdoutBuf.String())
+		lines := strings.Split(stdout, "\n")
+		lastLine := lines[len(lines)-1]
+		if lastLine != repo.Root {
+			t.Errorf("last line should be main repo path %q, got %q", repo.Root, lastLine)
+		}
+	})
+
+	t.Run("delete_with_relative_path", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		// Create two worktrees
+		_, err := runGitWt(t, binPath, repo.Root, "wt-a")
+		if err != nil {
+			t.Fatalf("failed to create worktree wt-a: %v", err)
+		}
+		outB, err := runGitWt(t, binPath, repo.Root, "wt-b")
+		if err != nil {
+			t.Fatalf("failed to create worktree wt-b: %v", err)
+		}
+		wtPathA := filepath.Join(filepath.Dir(worktreePath(outB)), "wt-a")
+		wtPathB := worktreePath(outB)
+
+		// From inside wt-b, delete wt-a using relative path ../wt-a
+		cmd := exec.Command(binPath, "-D", "../wt-a")
+		cmd.Dir = wtPathB
+		var stdoutBuf, stderrBuf bytes.Buffer
+		cmd.Stdout = &stdoutBuf
+		cmd.Stderr = &stderrBuf
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("git-wt -D ../wt-a failed: %v\nstderr: %s", err, stderrBuf.String())
+		}
+
+		// Verify wt-a was deleted
+		if _, err := os.Stat(wtPathA); !os.IsNotExist(err) {
+			t.Error("worktree wt-a should have been deleted")
+		}
+
+		// Verify wt-b still exists
+		if _, err := os.Stat(wtPathB); os.IsNotExist(err) {
+			t.Error("worktree wt-b should still exist")
+		}
+	})
+
+	t.Run("delete_with_absolute_path", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		out, err := runGitWt(t, binPath, repo.Root, "abs-test")
+		if err != nil {
+			t.Fatalf("failed to create worktree: %v", err)
+		}
+		wtPath := worktreePath(out)
+
+		if !filepath.IsAbs(wtPath) {
+			t.Fatalf("expected absolute path, got %q", wtPath)
+		}
+
+		// Delete using absolute path
+		cmd := exec.Command(binPath, "-D", wtPath)
+		cmd.Dir = repo.Root
+		var stdoutBuf, stderrBuf bytes.Buffer
+		cmd.Stdout = &stdoutBuf
+		cmd.Stderr = &stderrBuf
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("git-wt -D %s failed: %v\nstderr: %s", wtPath, err, stderrBuf.String())
+		}
+
+		// Verify worktree was deleted
+		if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
+			t.Error("worktree should have been deleted")
+		}
+	})
+
+	t.Run("delete_worktree_name_takes_precedence_over_filesystem_path", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		// Create a worktree named "test"
+		out, err := runGitWt(t, binPath, repo.Root, "test")
+		if err != nil {
+			t.Fatalf("failed to create worktree test: %v", err)
+		}
+		wtPath := worktreePath(out)
+
+		// Create a local directory named "test" inside the main repo
+		// This simulates: repo has a folder "test", and there's also a worktree "test"
+		localDir := filepath.Join(repo.Root, "test")
+		if err := os.Mkdir(localDir, 0755); err != nil {
+			t.Fatalf("failed to create local directory: %v", err)
+		}
+
+		// From main repo, delete "test" - should delete the worktree, not be confused by local dir
+		cmd := exec.Command(binPath, "-D", "test")
+		cmd.Dir = repo.Root
+		var stdoutBuf, stderrBuf bytes.Buffer
+		cmd.Stdout = &stdoutBuf
+		cmd.Stderr = &stderrBuf
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("git-wt -D test failed: %v\nstderr: %s", err, stderrBuf.String())
+		}
+
+		// Verify worktree was deleted (matched by name)
+		if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
+			t.Error("worktree test should have been deleted")
+		}
+
+		// Verify local directory still exists (we deleted the worktree, not the local dir)
+		if _, err := os.Stat(localDir); os.IsNotExist(err) {
+			t.Error("local directory test should still exist")
+		}
+	})
 }

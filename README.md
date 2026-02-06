@@ -6,10 +6,17 @@ A Git subcommand that makes `git worktree` simple.
 
 ``` console
 $ git wt                       # List all worktrees
-$ git wt <branch|worktree>     # Switch to worktree (create worktree/branch if needed)
-$ git wt -d <branch|worktree>  # Delete worktree and branch (safe)
-$ git wt -D <branch|worktree>  # Force delete worktree and branch
+$ git wt <branch|worktree|path>     # Switch to worktree (create worktree/branch if needed)
+$ git wt -d <branch|worktree|path>  # Delete worktree and branch (safe)
+$ git wt -D <branch|worktree|path>  # Force delete worktree and branch
 ```
+
+The target can be specified as:
+- **branch**: a git branch name — _eg._ `git wt feature-branch`
+- **worktree**: a directory name relative to [`wt.basedir`](#wtbasedir----basedir) (default `.wt`) — _eg._ `git wt some-worktree-folder-name`
+- **path**: a filesystem path (absolute or relative to the current working directory) to an existing worktree —  _eg._ `git wt ../sibling`, `git wt /absolute/path`
+
+When deleting, the same target types apply: `git wt -d feature-branch`, `git wt -d .`, `git wt -d ../sibling`
 
 > [!NOTE]
 > The default branch (e.g., main, master) is protected from accidental deletion.
