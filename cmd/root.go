@@ -86,10 +86,6 @@ Shell Integration:
   # powershell ($PROFILE)
   Invoke-Expression (git-wt --init powershell | Out-String)
 
-  Add --fzf or --peco for interactive worktree selection when running 'git wt' with no args:
-
-  eval "$(git-wt --init bash --fzf)"
-
 Configuration:
   Configuration is done via git config. All config options can be overridden
   with flags for a single invocation.
