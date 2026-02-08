@@ -73,6 +73,18 @@ Invoke-Expression (git wt --init powershell | Out-String)
 > [!IMPORTANT]
 > The shell integration creates a `git()` wrapper function to enable automatic directory switching with `git wt <branch>`. This wrapper intercepts only `git wt <branch>` commands and passes all other git commands through unchanged. If you have other tools or customizations that also wrap the `git` command, there may be conflicts.
 
+For interactive worktree selection with [fzf](https://github.com/junegunn/fzf) or [peco](https://github.com/peco/peco), add `--fzf` or `--peco`:
+
+``` zsh
+eval "$(git wt --init zsh --fzf)"
+```
+
+``` fish
+git wt --init fish --peco | source
+```
+
+With `--fzf` or `--peco`, running `git wt` with no arguments pipes the worktree listing through the selector for interactive selection and cd.
+
 If you want only completion without the `git()` wrapper (no automatic directory switching), use the `--nocd` option:
 
 ``` zsh
@@ -249,17 +261,21 @@ Default: `false`
 
 ## Recipes
 
-### peco
+### peco / fzf (built-in)
 
-You can use [peco](https://github.com/peco/peco) for interactive worktree selection:
+The easiest way to use [peco](https://github.com/peco/peco) or [fzf](https://github.com/junegunn/fzf) is with the `--peco` or `--fzf` flag on `--init` (see [Shell Integration](#shell-integration) above). Running `git wt` with no arguments will automatically launch the selector.
+
+### peco (manual)
+
+You can also use peco manually without the built-in integration:
 
 ``` console
 $ git wt $(git wt | tail -n +2 | peco | awk '{print $(NF-1)}')
 ```
 
-### fzf
+### fzf (manual)
 
-You can use [fzf](https://github.com/junegunn/fzf) for interactive worktree selection:
+You can also use fzf manually without the built-in integration:
 
 #### bash/zsh
 

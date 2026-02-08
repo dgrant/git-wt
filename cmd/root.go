@@ -40,6 +40,8 @@ var (
 	forceDeleteFlag bool
 	initShell       string
 	nocd            bool
+	fzfFlag         bool
+	pecoFlag        bool
 	// Config override flags.
 	basedirFlag       string
 	copyignoredFlag   bool
@@ -83,6 +85,10 @@ Shell Integration:
 
   # powershell ($PROFILE)
   Invoke-Expression (git-wt --init powershell | Out-String)
+
+  Add --fzf or --peco for interactive worktree selection when running 'git wt' with no args:
+
+  eval "$(git-wt --init bash --fzf)"
 
 Configuration:
   Configuration is done via git config. All config options can be overridden
@@ -179,6 +185,8 @@ func init() {
 	rootCmd.Flags().StringArrayVar(&hookFlag, "hook", nil, "Run command after creating new worktree (can be specified multiple times)")
 	rootCmd.Flags().BoolVar(&allowDeleteDefault, "allow-delete-default", false, "Allow deletion of the default branch (main, master)")
 	rootCmd.Flags().BoolVar(&relativeFlag, "relative", false, "Append current subdirectory to worktree path (like git diff --relative)")
+	rootCmd.Flags().BoolVar(&fzfFlag, "fzf", false, "Use fzf for interactive worktree selection (with --init)")
+	rootCmd.Flags().BoolVar(&pecoFlag, "peco", false, "Use peco for interactive worktree selection (with --init)")
 }
 
 func runRoot(cmd *cobra.Command, args []string) error {
@@ -186,7 +194,16 @@ func runRoot(cmd *cobra.Command, args []string) error {
 
 	// Handle init flag (only respects --nocd flag, not wt.nocd config)
 	if initShell != "" {
-		return runInit(initShell, nocd)
+		if fzfFlag && pecoFlag {
+			return fmt.Errorf("--fzf and --peco are mutually exclusive")
+		}
+		var selector string
+		if fzfFlag {
+			selector = "fzf"
+		} else if pecoFlag {
+			selector = "peco"
+		}
+		return runInit(initShell, nocd, selector)
 	}
 
 	// No arguments: list worktrees

@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
-// Bash hooks.
-const bashGitWrapper = `
+// bashGitWrapperTmpl is the bash wrapper with a __GIT_WT_ELSE_BRANCH__ placeholder
+// in the else branch (when output is not a directory).
+const bashGitWrapperTmpl = `
 # Override git command to cd after 'git wt <branch>'
 git() {
     if [[ "$1" == "wt" ]]; then
@@ -61,8 +63,7 @@ git() {
                 echo "$last_line"
             fi
         else
-            echo "$result"
-            return $exit_code
+__GIT_WT_ELSE_BRANCH__
         fi
     else
         command git "$@"
@@ -86,8 +87,25 @@ _git_wt() {
 }
 `
 
-// Zsh hooks.
-const zshGitWrapper = `
+const bashElseDefault = `            echo "$result"
+            return $exit_code`
+
+const bashElseSelectorTmpl = `            if [[ $exit_code -eq 0 && ${#args[@]} -eq 0 ]]; then
+                local selected
+                selected=$(echo "$result" | tail -n +2 | __SELECTOR__ | awk '{if($1=="*") print $2; else print $1}')
+                if [[ -n "$selected" && -d "$selected" ]]; then
+                    cd "$selected"
+                elif [[ -n "$selected" ]]; then
+                    echo "$selected"
+                fi
+                return 0
+            else
+                echo "$result"
+                return $exit_code
+            fi`
+
+// zshGitWrapperTmpl is the zsh wrapper (identical structure to bash).
+const zshGitWrapperTmpl = `
 # Override git command to cd after 'git wt <branch>'
 git() {
     if [[ "$1" == "wt" ]]; then
@@ -141,8 +159,7 @@ git() {
                 echo "$last_line"
             fi
         else
-            echo "$result"
-            return $exit_code
+__GIT_WT_ELSE_BRANCH__
         fi
     else
         command git "$@"
@@ -188,7 +205,7 @@ fi
 `
 
 // Fish hooks.
-const fishGitWrapper = `
+const fishGitWrapperTmpl = `
 # Override git command to cd after 'git wt <branch>'
 function git --wraps git
     if test "$argv[1]" = "wt"
@@ -238,10 +255,7 @@ function git --wraps git
                 printf "%s\n" "$last_line"
             end
         else
-            for line in $result
-                printf "%s\n" "$line"
-            end
-            return $exit_code
+__GIT_WT_ELSE_BRANCH__
         end
     else
         command git $argv
@@ -280,8 +294,28 @@ complete -x -c git -n '__fish_git_wt_needs_completion' -a '(__fish_git_wt_comple
 complete -x -c git-wt -a '(__fish_git_wt_direct_completions)'
 `
 
+const fishElseDefault = `            for line in $result
+                printf "%s\n" "$line"
+            end
+            return $exit_code`
+
+const fishElseSelectorTmpl = `            if test $exit_code -eq 0 -a (count $argv) -eq 1
+                set -l selected (printf "%s\n" $result | tail -n +2 | __SELECTOR__ | awk '{if($1=="*") print $2; else print $1}')
+                if test -n "$selected" -a -d "$selected"
+                    cd "$selected"
+                else if test -n "$selected"
+                    printf "%s\n" "$selected"
+                end
+                return 0
+            else
+                for line in $result
+                    printf "%s\n" "$line"
+                end
+                return $exit_code
+            end`
+
 // PowerShell hooks.
-const powershellGitWrapper = "" +
+const powershellGitWrapperTmpl = "" +
 	"# Override git command to cd after 'git wt <branch>'\n" +
 	"function Invoke-Git {\n" +
 	"    if ($args[0] -eq \"wt\") {\n" +
@@ -327,8 +361,7 @@ const powershellGitWrapper = "" +
 	"                Write-Output $lastLine\n" +
 	"            }\n" +
 	"        } else {\n" +
-	"            Write-Output $result\n" +
-	"            return $LASTEXITCODE\n" +
+	"__GIT_WT_ELSE_BRANCH__\n" +
 	"        }\n" +
 	"    } else {\n" +
 	"        & git.exe @args\n" +
@@ -356,19 +389,75 @@ $scriptBlock = {
 Register-ArgumentCompleter -Native -CommandName git -ScriptBlock $scriptBlock
 `
 
-func runInit(shell string, ignoreSwitchDirectory bool) error {
+const powershellElseDefault = "" +
+	"            Write-Output $result\n" +
+	"            return $LASTEXITCODE"
+
+const powershellElseSelectorTmpl = "" +
+	"            if ($LASTEXITCODE -eq 0 -and $wtArgs.Length -eq 0) {\n" +
+	"                $selected = $result | Select-Object -Skip 1 | __SELECTOR__ | ForEach-Object {\n" +
+	"                    $fields = $_ -split '\\s+' | Where-Object { $_ -ne '' }\n" +
+	"                    if ($fields[0] -eq '*') { $fields[1] } else { $fields[0] }\n" +
+	"                }\n" +
+	"                if ($selected -and (Test-Path $selected -PathType Container)) {\n" +
+	"                    Set-Location $selected\n" +
+	"                } elseif ($selected) {\n" +
+	"                    Write-Output $selected\n" +
+	"                }\n" +
+	"            } else {\n" +
+	"                Write-Output $result\n" +
+	"                return $LASTEXITCODE\n" +
+	"            }"
+
+// genBashGitWrapper generates the bash git wrapper with the given selector.
+func genBashGitWrapper(selector string) string {
+	elseBranch := bashElseDefault
+	if selector != "" {
+		elseBranch = strings.ReplaceAll(bashElseSelectorTmpl, "__SELECTOR__", selector)
+	}
+	return strings.Replace(bashGitWrapperTmpl, "__GIT_WT_ELSE_BRANCH__", elseBranch, 1)
+}
+
+// genZshGitWrapper generates the zsh git wrapper with the given selector.
+func genZshGitWrapper(selector string) string {
+	elseBranch := bashElseDefault // zsh uses the same default else as bash
+	if selector != "" {
+		elseBranch = strings.ReplaceAll(bashElseSelectorTmpl, "__SELECTOR__", selector)
+	}
+	return strings.Replace(zshGitWrapperTmpl, "__GIT_WT_ELSE_BRANCH__", elseBranch, 1)
+}
+
+// genFishGitWrapper generates the fish git wrapper with the given selector.
+func genFishGitWrapper(selector string) string {
+	elseBranch := fishElseDefault
+	if selector != "" {
+		elseBranch = strings.ReplaceAll(fishElseSelectorTmpl, "__SELECTOR__", selector)
+	}
+	return strings.Replace(fishGitWrapperTmpl, "__GIT_WT_ELSE_BRANCH__", elseBranch, 1)
+}
+
+// genPowershellGitWrapper generates the PowerShell git wrapper with the given selector.
+func genPowershellGitWrapper(selector string) string {
+	elseBranch := powershellElseDefault
+	if selector != "" {
+		elseBranch = strings.ReplaceAll(powershellElseSelectorTmpl, "__SELECTOR__", selector)
+	}
+	return strings.Replace(powershellGitWrapperTmpl, "__GIT_WT_ELSE_BRANCH__", elseBranch, 1)
+}
+
+func runInit(shell string, ignoreSwitchDirectory bool, selector string) error {
 	switch shell {
 	case "bash":
 		fmt.Fprint(os.Stdout, "# git-wt shell hook for bash\n")
 		if !ignoreSwitchDirectory {
-			fmt.Fprint(os.Stdout, bashGitWrapper)
+			fmt.Fprint(os.Stdout, genBashGitWrapper(selector))
 		}
 		fmt.Fprint(os.Stdout, bashCompletion)
 		return nil
 	case "zsh":
 		fmt.Fprint(os.Stdout, "# git-wt shell hook for zsh\n")
 		if !ignoreSwitchDirectory {
-			fmt.Fprint(os.Stdout, zshGitWrapper)
+			fmt.Fprint(os.Stdout, genZshGitWrapper(selector))
 		}
 		fmt.Fprint(os.Stdout, zshCompletion)
 		return nil
@@ -377,7 +466,7 @@ func runInit(shell string, ignoreSwitchDirectory bool) error {
 			return err
 		}
 		if !ignoreSwitchDirectory {
-			if _, err := io.WriteString(os.Stdout, fishGitWrapper); err != nil {
+			if _, err := io.WriteString(os.Stdout, genFishGitWrapper(selector)); err != nil {
 				return err
 			}
 		}
@@ -388,7 +477,7 @@ func runInit(shell string, ignoreSwitchDirectory bool) error {
 	case "powershell":
 		fmt.Fprint(os.Stdout, "# git-wt shell hook for PowerShell\n")
 		if !ignoreSwitchDirectory {
-			fmt.Fprint(os.Stdout, powershellGitWrapper)
+			fmt.Fprint(os.Stdout, genPowershellGitWrapper(selector))
 		}
 		fmt.Fprint(os.Stdout, powershellCompletion)
 		return nil

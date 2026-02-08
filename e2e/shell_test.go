@@ -105,6 +105,94 @@ func TestE2E_InitScript(t *testing.T) {
 			t.Error("expected error for unsupported shell")
 		}
 	})
+
+	t.Run("fzf_bash", func(t *testing.T) {
+		t.Parallel()
+		out, err := runGitWt(t, binPath, t.TempDir(), "--init", "bash", "--fzf")
+		if err != nil {
+			t.Fatalf("git-wt --init bash --fzf failed: %v\noutput: %s", err, out)
+		}
+		if !strings.Contains(out, "fzf") {
+			t.Errorf("output should contain 'fzf', got: %s", out)
+		}
+		if strings.Contains(out, "peco") {
+			t.Errorf("output should not contain 'peco' when --fzf is used")
+		}
+	})
+
+	t.Run("peco_bash", func(t *testing.T) {
+		t.Parallel()
+		out, err := runGitWt(t, binPath, t.TempDir(), "--init", "bash", "--peco")
+		if err != nil {
+			t.Fatalf("git-wt --init bash --peco failed: %v\noutput: %s", err, out)
+		}
+		if !strings.Contains(out, "peco") {
+			t.Errorf("output should contain 'peco', got: %s", out)
+		}
+		if strings.Contains(out, "fzf") {
+			t.Errorf("output should not contain 'fzf' when --peco is used")
+		}
+	})
+
+	t.Run("fzf_zsh", func(t *testing.T) {
+		t.Parallel()
+		out, err := runGitWt(t, binPath, t.TempDir(), "--init", "zsh", "--fzf")
+		if err != nil {
+			t.Fatalf("git-wt --init zsh --fzf failed: %v\noutput: %s", err, out)
+		}
+		if !strings.Contains(out, "fzf") {
+			t.Errorf("output should contain 'fzf', got: %s", out)
+		}
+	})
+
+	t.Run("fzf_fish", func(t *testing.T) {
+		t.Parallel()
+		out, err := runGitWt(t, binPath, t.TempDir(), "--init", "fish", "--fzf")
+		if err != nil {
+			t.Fatalf("git-wt --init fish --fzf failed: %v\noutput: %s", err, out)
+		}
+		if !strings.Contains(out, "fzf") {
+			t.Errorf("output should contain 'fzf', got: %s", out)
+		}
+	})
+
+	t.Run("peco_fish", func(t *testing.T) {
+		t.Parallel()
+		out, err := runGitWt(t, binPath, t.TempDir(), "--init", "fish", "--peco")
+		if err != nil {
+			t.Fatalf("git-wt --init fish --peco failed: %v\noutput: %s", err, out)
+		}
+		if !strings.Contains(out, "peco") {
+			t.Errorf("output should contain 'peco', got: %s", out)
+		}
+	})
+
+	t.Run("fzf_peco_mutually_exclusive", func(t *testing.T) {
+		t.Parallel()
+		out, err := runGitWt(t, binPath, t.TempDir(), "--init", "bash", "--fzf", "--peco")
+		if err == nil {
+			t.Error("expected error when both --fzf and --peco are passed")
+		}
+		if !strings.Contains(out, "mutually exclusive") {
+			t.Errorf("error should mention 'mutually exclusive', got: %s", out)
+		}
+	})
+
+	t.Run("fzf_nocd", func(t *testing.T) {
+		t.Parallel()
+		out, err := runGitWt(t, binPath, t.TempDir(), "--init", "bash", "--fzf", "--nocd")
+		if err != nil {
+			t.Fatalf("git-wt --init bash --fzf --nocd failed: %v\noutput: %s", err, out)
+		}
+		// --nocd suppresses the git wrapper entirely, so fzf should not appear
+		if strings.Contains(out, "fzf") {
+			t.Error("output should not contain 'fzf' when --nocd is used (wrapper is suppressed)")
+		}
+		// Should still contain completion
+		if !strings.Contains(out, "_git_wt()") {
+			t.Error("output should contain completion function")
+		}
+	})
 }
 
 // TestE2E_ShellIntegration_StdoutFormat tests that git-wt output is compatible
